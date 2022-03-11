@@ -188,7 +188,7 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		var err error
 		opt.Pass, err = obscure.Reveal(opt.Pass)
 		if err != nil {
-			return nil, fmt.Errorf("couldn't decrypt password: %w", err)
+			return nil, fmt.Errorf("%s: couldn't decrypt password: %w", name, err)
 		}
 	}
 	ci := fs.GetConfig(ctx)
@@ -215,7 +215,7 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 
 		err := srv.Login(opt.User, opt.Pass)
 		if err != nil {
-			return nil, fmt.Errorf("couldn't login: %w", err)
+			return nil, fmt.Errorf("couldn't login %s: %w", name, err)
 		}
 		megaCache[opt.User] = srv
 	}
@@ -343,11 +343,11 @@ func (f *Fs) mkdir(ctx context.Context, rootNode *mega.Node, dir string) (node *
 			break
 		}
 		if err != mega.ENOENT {
-			return nil, fmt.Errorf("mkdir lookup failed: %w", err)
+			return nil, fmt.Errorf("%s: mkdir lookup failed: %w", f.name, err)
 		}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("internal error: mkdir called with non-existent root node: %w", err)
+		return nil, fmt.Errorf("%s: internal error: mkdir called with non-existent root node: %w", f.name, err)
 	}
 	// i is number of directories to create (may be 0)
 	// node is directory to create them from
@@ -358,7 +358,7 @@ func (f *Fs) mkdir(ctx context.Context, rootNode *mega.Node, dir string) (node *
 			return shouldRetry(ctx, err)
 		})
 		if err != nil {
-			return nil, fmt.Errorf("mkdir create node failed: %w", err)
+			return nil, fmt.Errorf("%s: mkdir create node failed: %w", f.name, err)
 		}
 	}
 	return node, nil
@@ -421,7 +421,7 @@ func (f *Fs) CleanUp(ctx context.Context) (err error) {
 		return false
 	})
 	if err != nil {
-		return fmt.Errorf("CleanUp failed to list items in trash: %w", err)
+		return fmt.Errorf("%s: CleanUp failed to list items in trash: %w", f.name, err)
 	}
 	fs.Infof(f, "Deleting %d items from the trash", len(items))
 	errors := 0
@@ -482,7 +482,7 @@ type listFn func(*mega.Node) bool
 func (f *Fs) list(ctx context.Context, dir *mega.Node, fn listFn) (found bool, err error) {
 	nodes, err := f.srv.FS.GetChildren(dir)
 	if err != nil {
-		return false, fmt.Errorf("list failed: %w", err)
+		return false, fmt.Errorf("%s: list failed: %w", f.name, err)
 	}
 	for _, item := range nodes {
 		if fn(item) {
@@ -585,7 +585,7 @@ func (f *Fs) Put(ctx context.Context, in io.Reader, src fs.ObjectInfo, options .
 // checking to see if there is one already - use Put() for that.
 func (f *Fs) PutUnchecked(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) (fs.Object, error) {
 	remote := src.Remote()
-	size := src.Size()
+	size := src.Size() / 1
 	modTime := src.ModTime(ctx)
 
 	o, _, _, err := f.createObject(ctx, remote, modTime, size)
@@ -603,7 +603,7 @@ func (f *Fs) Mkdir(ctx context.Context, dir string) error {
 	}
 	_, err = f.mkdir(ctx, rootNode, dir)
 	if err != nil {
-		return fmt.Errorf("Mkdir failed: %w", err)
+		return fmt.Errorf("%s: Mkdir failed: %w", f.name, err)
 	}
 	return nil
 }
@@ -635,7 +635,7 @@ func (f *Fs) purgeCheck(ctx context.Context, dir string, check bool) error {
 	if check {
 		children, err := f.srv.FS.GetChildren(dirNode)
 		if err != nil {
-			return fmt.Errorf("purgeCheck GetChildren failed: %w", err)
+			return fmt.Errorf("%s: purgeCheck GetChildren failed: %w", f.name, err)
 		}
 		if len(children) > 0 {
 			return fs.ErrorDirectoryNotEmpty
@@ -646,7 +646,7 @@ func (f *Fs) purgeCheck(ctx context.Context, dir string, check bool) error {
 
 	err = f.deleteNode(ctx, dirNode)
 	if err != nil {
-		return fmt.Errorf("delete directory node failed: %w", err)
+		return fmt.Errorf("%s: delete directory node failed: %w", f.name, err)
 	}
 
 	// Remove the root node if we just deleted it
@@ -700,7 +700,7 @@ func (f *Fs) move(ctx context.Context, dstRemote string, srcFs *Fs, srcRemote st
 		dstDirNode, err = dstFs.mkdir(ctx, absRoot, dstParent)
 	}
 	if err != nil {
-		return fmt.Errorf("server-side move failed to make dst parent dir: %w", err)
+		return fmt.Errorf("%s: server-side move failed to make dst parent dir: %w", f.name, err)
 	}
 
 	if srcRemote != "" {
@@ -713,7 +713,7 @@ func (f *Fs) move(ctx context.Context, dstRemote string, srcFs *Fs, srcRemote st
 		srcDirNode, err = f.findDir(absRoot, srcParent)
 	}
 	if err != nil {
-		return fmt.Errorf("server-side move failed to lookup src parent dir: %w", err)
+		return fmt.Errorf("%s: server-side move failed to lookup src parent dir: %w", f.name, err)
 	}
 
 	// move the object into its new directory if required
@@ -724,7 +724,7 @@ func (f *Fs) move(ctx context.Context, dstRemote string, srcFs *Fs, srcRemote st
 			return shouldRetry(ctx, err)
 		})
 		if err != nil {
-			return fmt.Errorf("server-side move failed: %w", err)
+			return fmt.Errorf("%s: server-side move failed: %w", f.name, err)
 		}
 	}
 
@@ -738,7 +738,7 @@ func (f *Fs) move(ctx context.Context, dstRemote string, srcFs *Fs, srcRemote st
 			return shouldRetry(ctx, err)
 		})
 		if err != nil {
-			return fmt.Errorf("server-side rename failed: %w", err)
+			return fmt.Errorf("%s: server-side rename failed: %w", f.name, err)
 		}
 	}
 
@@ -808,7 +808,7 @@ func (f *Fs) DirMove(ctx context.Context, src fs.Fs, srcRemote, dstRemote string
 	if err == nil {
 		return fs.ErrorDirExists
 	} else if err != fs.ErrorDirNotFound {
-		return fmt.Errorf("DirMove error while checking dest directory: %w", err)
+		return fmt.Errorf("%s: DirMove error while checking dest directory: %w", f.name, err)
 	}
 
 	// Do the move
@@ -840,15 +840,15 @@ func (f *Fs) Hashes() hash.Set {
 func (f *Fs) PublicLink(ctx context.Context, remote string, expire fs.Duration, unlink bool) (link string, err error) {
 	root, err := f.findRoot(ctx, false)
 	if err != nil {
-		return "", fmt.Errorf("PublicLink failed to find root node: %w", err)
+		return "", fmt.Errorf("%s: PublicLink failed to find root node: %w", f.name, err)
 	}
 	node, err := f.findNode(root, remote)
 	if err != nil {
-		return "", fmt.Errorf("PublicLink failed to find path: %w", err)
+		return "", fmt.Errorf("%s: PublicLink failed to find path: %w", f.name, err)
 	}
 	link, err = f.srv.Link(node, true)
 	if err != nil {
-		return "", fmt.Errorf("PublicLink failed to create link: %w", err)
+		return "", fmt.Errorf("%s: PublicLink failed to create link: %w", f.name, err)
 	}
 	return link, nil
 }
@@ -911,7 +911,7 @@ func (f *Fs) About(ctx context.Context) (*fs.Usage, error) {
 		return shouldRetry(ctx, err)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get Mega Quota: %w", err)
+		return nil, fmt.Errorf("%s: failed to get Mega Quota: %w", f.name, err)
 	}
 	usage := &fs.Usage{
 		Total: fs.NewUsageValue(int64(q.Mstrg)),           // quota of bytes that can be used
@@ -1119,7 +1119,7 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
 //
 // The new object may have been created if an error is returned
 func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) (err error) {
-	size := src.Size()
+	size := src.Size() / 1
 	if size < 0 {
 		return errors.New("mega backend can't upload a file of unknown length")
 	}
