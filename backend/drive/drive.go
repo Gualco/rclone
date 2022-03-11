@@ -724,15 +724,15 @@ func (f *Fs) shouldRetry(ctx context.Context, err error) (bool, error) {
 			reason := gerr.Errors[0].Reason
 			if reason == "rateLimitExceeded" || reason == "userRateLimitExceeded" {
 				if f.opt.StopOnUploadLimit && gerr.Errors[0].Message == "User rate limit exceeded." {
-					fs.Errorf(f, "Received upload limit error: %v", err)
+					fs.Errorf(f, "%s: Received upload limit error: %v", f.name, err)
 					return false, fserrors.FatalError(err)
 				}
 				return true, err
 			} else if f.opt.StopOnDownloadLimit && reason == "downloadQuotaExceeded" {
-				fs.Errorf(f, "Received download limit error: %v", err)
+				fs.Errorf(f, "%s: Received download limit error: %v", f.name, err)
 				return false, fserrors.FatalError(err)
 			} else if f.opt.StopOnUploadLimit && reason == "teamDriveFileLimitExceeded" {
-				fs.Errorf(f, "Received Shared Drive file limit error: %v", err)
+				fs.Errorf(f, "%s: Received Shared Drive file limit error: %v", f.name, err)
 				return false, fserrors.FatalError(err)
 			}
 		}
@@ -1216,7 +1216,7 @@ func NewFs(ctx context.Context, name, path string, m configmap.Mapper) (fs.Fs, e
 			}
 		}
 		f.rootFolderID = rootID
-		fs.Debugf(f, "'root_folder_id = %s' - save this in the config to speed up startup", rootID)
+		fs.Debugf(f, "'%s: 'root_folder_id = %s' - save this in the config to speed up startup",f.name, rootID)
 	}
 
 	f.dirCache = dircache.New(f.root, f.rootFolderID, f)
@@ -2557,6 +2557,7 @@ func (f *Fs) teamDriveOK(ctx context.Context) (err error) {
 		return fmt.Errorf("failed to get Shared Drive info: %w", err)
 	}
 	fs.Debugf(f, "read info from Shared Drive %q", td.Name)
+
 	return err
 }
 
@@ -2580,6 +2581,7 @@ func (f *Fs) About(ctx context.Context) (*fs.Usage, error) {
 		return nil, fmt.Errorf("failed to get Drive storageQuota: %w", err)
 	}
 	q := about.StorageQuota
+    
 	usage := &fs.Usage{
 		Used:    fs.NewUsageValue(q.UsageInDrive),           // bytes in use
 		Trashed: fs.NewUsageValue(q.UsageInDriveTrash),      // bytes in trash
@@ -2747,7 +2749,7 @@ func (f *Fs) ChangeNotify(ctx context.Context, notifyFunc func(string, fs.EntryT
 		// get the StartPageToken early so all changes from now on get processed
 		startPageToken, err := f.changeNotifyStartPageToken(ctx)
 		if err != nil {
-			fs.Infof(f, "Failed to get StartPageToken: %s", err)
+			fs.Infof(f, "%s: Failed to get StartPageToken: %s", f.name ,err)
 		}
 		var ticker *time.Ticker
 		var tickerC <-chan time.Time
@@ -2776,10 +2778,10 @@ func (f *Fs) ChangeNotify(ctx context.Context, notifyFunc func(string, fs.EntryT
 						continue
 					}
 				}
-				fs.Debugf(f, "Checking for changes on remote")
+				fs.Debugf(f, "Checking for changes on remote %s", f.name)
 				startPageToken, err = f.changeNotifyRunner(ctx, notifyFunc, startPageToken)
 				if err != nil {
-					fs.Infof(f, "Change notify listener failure: %s", err)
+					fs.Infof(f, "Change notify listener failure: %s on remote %s", err, f.name)
 				}
 			}
 		}
